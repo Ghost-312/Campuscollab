@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
 import api from "../services/api";
 import ConfirmModal from "./ConfirmModal";
 
-const socket = io("http://localhost:5000", {
-  auth: { token: localStorage.getItem("token") }
-});
+const POLL_MS = 3000;
 
 export default function Chat({ project }) {
   const [msg, setMsg] = useState("");
@@ -15,12 +12,14 @@ export default function Chat({ project }) {
   const [editText, setEditText] = useState("");
   const [confirm, setConfirm] = useState({ open: false, messageId: null });
   const previousProjectId = useRef(null);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     if (!project) return;
+    let cancelled = false;
 
     if (previousProjectId.current && previousProjectId.current !== project._id) {
-      socket.emit("leaveProject", previousProjectId.current);
+      // Project changed, clear prior state before loading new messages.
     }
     previousProjectId.current = project._id;
     setMessages([]);
@@ -28,33 +27,19 @@ export default function Chat({ project }) {
     setEditingMessageId(null);
     setEditText("");
 
-    socket.emit("joinProject", project._id);
-
     const loadMessages = async () => {
-      const res = await api.get(`/messages/${project._id}`);
-      setMessages(res.data);
+      try {
+        const res = await api.get(`/messages/${project._id}`);
+        if (!cancelled) setMessages(res.data);
+      } catch (err) {}
     };
 
     loadMessages();
-
-    const handleMessage = data => {
-      setMessages(prev => [...prev, data]);
-    };
-    const handleEdit = data => {
-      setMessages(prev => prev.map(m => (m._id === data._id ? data : m)));
-    };
-    const handleDelete = data => {
-      setMessages(prev => prev.filter(m => m._id !== data.messageId));
-    };
-
-    socket.on("chatMessage", handleMessage);
-    socket.on("editMessage", handleEdit);
-    socket.on("deleteMessage", handleDelete);
+    pollRef.current = setInterval(loadMessages, POLL_MS);
 
     return () => {
-      socket.off("chatMessage", handleMessage);
-      socket.off("editMessage", handleEdit);
-      socket.off("deleteMessage", handleDelete);
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [project]);
 
@@ -68,14 +53,16 @@ export default function Chat({ project }) {
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
-  const send = () => {
+  const send = async () => {
     if (!msg.trim()) return;
-    socket.emit("chatMessage", {
-      projectId: project._id,
-      text: msg,
-      sender: "You"
-    });
-    setMsg("");
+    try {
+      const res = await api.post(`/messages/${project._id}`, {
+        text: msg,
+        sender: "You"
+      });
+      setMessages(prev => [...prev, res.data]);
+      setMsg("");
+    } catch (err) {}
   };
 
   const startEdit = message => {
@@ -84,15 +71,18 @@ export default function Chat({ project }) {
     setMenuIndex(null);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editText.trim() || !editingMessageId) return;
-    socket.emit("editMessage", {
-      projectId: project._id,
-      messageId: editingMessageId,
-      text: editText
-    });
-    setEditingMessageId(null);
-    setEditText("");
+    try {
+      const res = await api.put(`/messages/${editingMessageId}`, {
+        text: editText
+      });
+      if (res.data) {
+        setMessages(prev => prev.map(m => (m._id === res.data._id ? res.data : m)));
+      }
+      setEditingMessageId(null);
+      setEditText("");
+    } catch (err) {}
   };
 
   const confirmDelete = messageId => {
@@ -100,12 +90,12 @@ export default function Chat({ project }) {
     setMenuIndex(null);
   };
 
-  const deleteMsg = () => {
+  const deleteMsg = async () => {
     if (!confirm.messageId) return;
-    socket.emit("deleteMessage", {
-      projectId: project._id,
-      messageId: confirm.messageId
-    });
+    try {
+      await api.delete(`/messages/${confirm.messageId}`);
+      setMessages(prev => prev.filter(m => m._id !== confirm.messageId));
+    } catch (err) {}
     setConfirm({ open: false, messageId: null });
   };
 
