@@ -1,7 +1,12 @@
 const mongoose = require("mongoose");
 
-module.exports = mongoose.model("Project", new mongoose.Schema({
+const projectSchema = new mongoose.Schema({
   title: String,
   description: String,
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
-}));
+  code: { type: String, unique: true, index: true },
+  inviteEnabled: { type: Boolean, default: true },
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
+});
+
+module.exports = mongoose.model("Project", projectSchema);

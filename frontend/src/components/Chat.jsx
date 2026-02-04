@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../services/api";
+import socket from "../services/socket";
 import ConfirmModal from "./ConfirmModal";
 
-const POLL_MS = 3000;
+const POLL_MS = 4000;
 
 export default function Chat({ project }) {
   const [msg, setMsg] = useState("");
@@ -12,16 +13,56 @@ export default function Chat({ project }) {
   const [editText, setEditText] = useState("");
   const [confirm, setConfirm] = useState({ open: false, messageId: null });
   const previousProjectId = useRef(null);
-  const pollRef = useRef(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const roomId = project?._id || "global";
+
+  const getSenderName = message => {
+    if (!message) return "Member";
+    if (typeof message.sender === "string" && message.sender.trim()) {
+      return message.sender.trim();
+    }
+    const senderObj = message.senderId && typeof message.senderId === "object"
+      ? message.senderId
+      : null;
+    if (senderObj) {
+      return senderObj.name || senderObj.email || "Member";
+    }
+    if (message.senderId) return String(message.senderId);
+    return "Member";
+  };
+
+  const isOwnMessage = message => {
+    if (!message || !user?.id) return false;
+    const senderId =
+      typeof message.senderId === "object" && message.senderId
+        ? message.senderId._id
+        : message.senderId;
+    return String(senderId) === String(user.id);
+  };
+
+  const getSeenUsers = message => {
+    if (!message || !Array.isArray(message.seenBy)) return [];
+    return message.seenBy.filter(seen => {
+      const id =
+        typeof seen === "object" && seen ? seen._id || seen.id : seen;
+      return String(id) !== String(user?.id);
+    });
+  };
+
+  const markSeen = async () => {
+    try {
+      await api.post(`/messages/${roomId}/seen`);
+    } catch (err) {}
+  };
 
   useEffect(() => {
-    if (!project) return;
     let cancelled = false;
+    let pollId = null;
 
-    if (previousProjectId.current && previousProjectId.current !== project._id) {
-      // Project changed, clear prior state before loading new messages.
+    if (previousProjectId.current && previousProjectId.current !== roomId) {
+      socket.emit("leaveProject", previousProjectId.current);
     }
-    previousProjectId.current = project._id;
+    previousProjectId.current = roomId;
     setMessages([]);
     setMenuIndex(null);
     setEditingMessageId(null);
@@ -29,19 +70,61 @@ export default function Chat({ project }) {
 
     const loadMessages = async () => {
       try {
-        const res = await api.get(`/messages/${project._id}`);
+        const res = await api.get(`/messages/${roomId}`);
         if (!cancelled) setMessages(res.data);
+        if (!cancelled) await markSeen();
       } catch (err) {}
     };
 
     loadMessages();
-    pollRef.current = setInterval(loadMessages, POLL_MS);
+    socket.emit("joinProject", roomId);
+
+    const startPolling = () => {
+      if (!pollId) pollId = setInterval(loadMessages, POLL_MS);
+    };
+    const stopPolling = () => {
+      if (pollId) {
+        clearInterval(pollId);
+        pollId = null;
+      }
+    };
+
+    if (socket.connected) {
+      stopPolling();
+    } else {
+      startPolling();
+    }
+
+    const onCreated = message => {
+      setMessages(prev => (prev.some(m => m._id === message._id) ? prev : [...prev, message]));
+      if (!isOwnMessage(message)) markSeen();
+    };
+    const onUpdated = message => {
+      setMessages(prev => prev.map(m => (m._id === message._id ? message : m)));
+    };
+    const onDeleted = payload => {
+      setMessages(prev => prev.filter(m => m._id !== payload._id));
+    };
+
+    const onConnect = () => stopPolling();
+    const onDisconnect = () => startPolling();
+
+    socket.on("message:created", onCreated);
+    socket.on("message:updated", onUpdated);
+    socket.on("message:deleted", onDeleted);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
 
     return () => {
       cancelled = true;
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollId) clearInterval(pollId);
+      socket.off("message:created", onCreated);
+      socket.off("message:updated", onUpdated);
+      socket.off("message:deleted", onDeleted);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
     };
-  }, [project]);
+  }, [roomId]);
 
   useEffect(() => {
     const handleClick = e => {
@@ -56,11 +139,12 @@ export default function Chat({ project }) {
   const send = async () => {
     if (!msg.trim()) return;
     try {
-      const res = await api.post(`/messages/${project._id}`, {
-        text: msg,
-        sender: "You"
+      const res = await api.post(`/messages/${roomId}`, {
+        text: msg
       });
-      setMessages(prev => [...prev, res.data]);
+      setMessages(prev =>
+        prev.some(m => m._id === res.data._id) ? prev : [...prev, res.data]
+      );
       setMsg("");
     } catch (err) {}
   };
@@ -103,9 +187,14 @@ export default function Chat({ project }) {
     <div className="chat-box">
       <div className="chat-messages">
         {messages.map((m, i) => (
-          <div key={m._id || i} className="chat-row">
-            <div className="chat-bubble">
-              <span className="chat-sender">{m.sender}</span>
+          <div
+            key={m._id || i}
+            className={`chat-row ${isOwnMessage(m) ? "own" : ""}`}
+          >
+            <div className={`chat-bubble ${isOwnMessage(m) ? "own" : ""}`}>
+              <span className="chat-sender">
+                {isOwnMessage(m) ? "You" : getSenderName(m)}
+              </span>
               {editingMessageId === m._id ? (
                 <input
                   className="edit-input"
@@ -120,6 +209,22 @@ export default function Chat({ project }) {
               <span className="chat-time">
                 {m.createdAt ? new Date(m.createdAt).toLocaleTimeString() : m.time}
               </span>
+              {isOwnMessage(m) ? (
+                <span
+                  className="chat-receipt"
+                  title={getSeenUsers(m).map(u => u.name || u.email || "Member").join(", ")}
+                >
+                  {(() => {
+                    const seenUsers = getSeenUsers(m);
+                    if (seenUsers.length === 0) return "Sent";
+                    const names = seenUsers.map(u => u.name || u.email || "Member");
+                    const preview = names.slice(0, 2).join(", ");
+                    return names.length > 2
+                      ? `Seen by ${preview} +${names.length - 2}`
+                      : `Seen by ${preview}`;
+                  })()}
+                </span>
+              ) : null}
 
               <div className="kebab">
                 <span onClick={() => setMenuIndex(menuIndex === i ? null : i)}>...</span>

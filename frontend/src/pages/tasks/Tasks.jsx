@@ -26,7 +26,7 @@ export default function Tasks({ projectId }) {
 
   const addTask = async () => {
     const res = await api.post(`/tasks/${projectId}`, { text });
-    setTasks([...tasks, res.data]);
+    setTasks(prev => (prev.some(t => t._id === res.data._id) ? prev : [...prev, res.data]));
     setText("");
   };
 
@@ -113,7 +113,10 @@ export default function Tasks({ projectId }) {
                 ...
               </span>
               {taskMenuOpen === t._id && (
-                <div className="kebab-menu">
+                <div
+                  className="kebab-menu"
+                  onMouseLeave={() => setTaskMenuOpen(null)}
+                >
                   <button onClick={() => startEditTask(t)}>
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
                       <path

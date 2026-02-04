@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../services/api";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("code");
+    if (code) {
+      localStorage.setItem("pendingProjectCode", code.toUpperCase());
+    }
+  }, [location.search]);
 
   const login = async () => {
     try {
       const res = await api.post("/auth/login", { email, password });
       localStorage.setItem("token", res.data.token);
+      if (res.data.user) {
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+      }
       navigate("/dashboard");
     } catch (err) {
       setError("Enter correct email or password");
@@ -41,6 +53,10 @@ export default function Login() {
         <button className="primary-btn" onClick={login}>
           Login
         </button>
+
+        <p className="auth-link">
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
 
         <p className="auth-link">
           New user? <Link to="/register">Register here</Link>

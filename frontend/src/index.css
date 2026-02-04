@@ -64,6 +64,15 @@ a:hover {
   padding: 32px 24px 48px;
 }
 
+.top-bar {
+  max-width: 1280px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 /* =========================
    AUTH LAYOUT
 ========================= */
@@ -249,6 +258,57 @@ select {
   color: var(--text-1);
 }
 
+.password-field {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.password-field input {
+  margin-bottom: 0;
+  padding-right: 86px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.toggle-password:hover {
+  border-color: rgba(0, 245, 255, 0.8);
+  color: #ffffff;
+}
+
+.password-strength {
+  font-size: 12px;
+  margin: 6px 0 6px;
+}
+
+.strength-weak {
+  color: var(--neon-red);
+}
+
+.strength-ok {
+  color: var(--neon-yellow);
+}
+
+.strength-strong {
+  color: var(--neon-green);
+}
+
+.password-rules {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
 /* =========================
    BUTTONS
 ========================= */
@@ -386,6 +446,11 @@ button:active {
   margin-bottom: 0;
 }
 
+.task-input select {
+  max-width: 180px;
+  margin-bottom: 0;
+}
+
 /* =========================
    TASK CARD
 ========================= */
@@ -411,6 +476,12 @@ button:active {
   font-weight: 600;
   color: var(--text-0);
   font-size: 14px;
+}
+
+.task-assignee {
+  font-weight: 500;
+  color: var(--text-2);
+  font-size: 12px;
 }
 
 .task-todo {
@@ -458,6 +529,10 @@ button:active {
   margin-bottom: 10px;
 }
 
+.chat-row.own {
+  justify-content: flex-end;
+}
+
 .chat-bubble {
   max-width: 78%;
   padding: 10px 14px;
@@ -470,6 +545,11 @@ button:active {
 
 .chat-bubble:hover {
   border-color: rgba(0, 245, 255, 0.5);
+}
+
+.chat-bubble.own {
+  background: rgba(0, 245, 255, 0.12);
+  border-color: rgba(0, 245, 255, 0.35);
 }
 
 .chat-sender {
@@ -485,6 +565,13 @@ button:active {
   font-size: 10px;
   color: var(--text-2);
   margin-top: 6px;
+}
+
+.chat-receipt {
+  display: block;
+  font-size: 10px;
+  color: var(--neon-green);
+  margin-top: 2px;
 }
 
 .kebab {
@@ -652,6 +739,85 @@ button:active {
 
 .edit-input {
   margin-bottom: 8px;
+}
+
+.member-list {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.member-list h4 {
+  flex: 0 0 100%;
+  margin: 0 0 6px;
+}
+
+.member-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(0, 245, 255, 0.08);
+  border: 1px solid rgba(0, 245, 255, 0.3);
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.copy-status {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.invite-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.invite-row input {
+  flex: 1;
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
+.invite-row .primary-btn {
+  width: auto;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.activity-row {
+  padding: 10px 12px;
+  background: rgba(14, 18, 24, 0.7);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.activity-main {
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.activity-time {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-2);
 }
 
 /* =========================
