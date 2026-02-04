@@ -18,15 +18,21 @@ export default function Login() {
   }, [location.search]);
 
   const login = async () => {
+    setError("");
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setError("Email and password are required");
+      return;
+    }
     try {
-      const res = await api.post("/auth/login", { email, password });
+      const res = await api.post("/auth/login", { email: cleanEmail, password });
       localStorage.setItem("token", res.data.token);
       if (res.data.user) {
         localStorage.setItem("user", JSON.stringify(res.data.user));
       }
       navigate("/dashboard");
     } catch (err) {
-      setError("Enter correct email or password");
+      setError(err?.response?.data?.msg || "Login failed");
     }
   };
 

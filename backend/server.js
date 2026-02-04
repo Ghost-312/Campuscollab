@@ -40,6 +40,20 @@ app.use("/api/tasks", require("./routes/taskRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 
+app.get("/api/health", (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const smtpConfigured = Boolean(
+    process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  );
+
+  res.json({
+    status: "ok",
+    time: new Date().toISOString(),
+    db: { state: dbState, ok: dbState === 1 },
+    smtp: { configured: smtpConfigured }
+  });
+});
+
 if (require.main === module) {
   const port = process.env.PORT || 5000;
   server.listen(port, () => {

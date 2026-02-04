@@ -7,6 +7,13 @@ const { sendPasswordResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
+const normalizeEmail = value => String(value || "").trim().toLowerCase();
+const isValidEmail = email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const findUserByEmail = email =>
+  User.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") });
+const isProd = process.env.NODE_ENV === "production";
+
 const isStrongPassword = password => {
   if (typeof password !== "string") return false;
   if (password.length < 8) return false;
@@ -20,9 +27,24 @@ const isStrongPassword = password => {
 /* REGISTER */
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const name = String(req.body.name || "").trim();
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
+    const role = String(req.body.role || "student").trim();
 
-    const exists = await User.findOne({ email });
+    if (!email || !password) {
+      return res.status(400).json({ msg: "Email and password are required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ msg: "Enter a valid email address" });
+    }
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        msg: "Password must be at least 8 characters and include upper, lower, number, and symbol."
+      });
+    }
+
+    const exists = await findUserByEmail(email);
     if (exists) {
       return res.status(400).json({ msg: "Email already registered" });
     }
@@ -47,9 +69,17 @@ router.post("/register", async (req, res) => {
 /* LOGIN */
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
 
-    const user = await User.findOne({ email });
+    if (!email || !password) {
+      return res.status(400).json({ msg: "Email and password are required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ msg: "Enter a valid email address" });
+    }
+
+    const user = await findUserByEmail(email);
     if (!user) {
       return res.status(400).json({ msg: "Enter correct email or password" });
     }
@@ -77,10 +107,13 @@ router.post("/login", async (req, res) => {
 /* FORGOT PASSWORD */
 router.post("/forgot-password", async (req, res) => {
   try {
-    const email = String(req.body.email || "").trim();
+    const email = normalizeEmail(req.body.email);
     if (!email) return res.status(400).json({ msg: "Email is required" });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ msg: "Enter a valid email address" });
+    }
 
-    const user = await User.findOne({ email });
+    const user = await findUserByEmail(email);
     if (!user) {
       return res.json({ msg: "If the account exists, a reset link was sent." });
     }
@@ -94,17 +127,27 @@ router.post("/forgot-password", async (req, res) => {
     const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
-    await sendPasswordResetEmail({
-      to: user.email,
-      name: user.name,
-      resetLink
-    });
+    try {
+      await sendPasswordResetEmail({
+        to: user.email,
+        name: user.name,
+        resetLink
+      });
+    } catch (err) {
+      if (String(err?.message) === "SMTP_NOT_CONFIGURED") {
+        if (process.env.NODE_ENV !== "production") {
+          return res.json({
+            msg: "Email not configured on server. Use the reset link below.",
+            resetLink
+          });
+        }
+        return res.status(500).json({ msg: "Email not configured on server" });
+      }
+      throw err;
+    }
 
     res.json({ msg: "If the account exists, a reset link was sent." });
   } catch (err) {
-    if (String(err?.message) === "SMTP_NOT_CONFIGURED") {
-      return res.status(500).json({ msg: "Email not configured on server" });
-    }
     res.status(500).json({ msg: "Password reset failed" });
   }
 });
@@ -138,6 +181,55 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({
         msg: "Password must be at least 8 characters and include upper, lower, number, and symbol."
       });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    user.password = hashedPassword;
+    user.resetTokenHash = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+
+    res.json({ msg: "Password updated" });
+  } catch (err) {
+    res.status(500).json({ msg: "Password reset failed" });
+  }
+});
+
+/* ADMIN/DEV RESET PASSWORD (non-production only) */
+router.post("/admin-reset-password", async (req, res) => {
+  if (isProd) {
+    return res.status(404).json({ msg: "Not found" });
+  }
+
+  const adminToken = process.env.ADMIN_RESET_TOKEN;
+  if (!adminToken) {
+    return res.status(500).json({ msg: "Admin reset not configured" });
+  }
+
+  const providedToken = String(req.headers["x-admin-reset-token"] || "").trim();
+  if (providedToken !== adminToken) {
+    return res.status(401).json({ msg: "Unauthorized" });
+  }
+
+  try {
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ msg: "Email and password are required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ msg: "Enter a valid email address" });
+    }
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        msg: "Password must be at least 8 characters and include upper, lower, number, and symbol."
+      });
+    }
+
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);

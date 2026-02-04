@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 const COLORS = {
   Completed: "#00ff85",
@@ -36,37 +36,50 @@ export default function TaskPieChart({ tasks }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div style={{ width: "100%", height: 240 }}>
-      <ResponsiveContainer>
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={56}
-            outerRadius={86}
-            paddingAngle={1}
-            labelLine={false}
-            label={({ name, percent }) => {
-              if (total === 0) return "";
-              const pct = formatPercent(percent);
-              if (pct < 12) return "";
-              return `${name}: ${pct}%`;
-            }}
-          >
-            {data.map(entry => (
-              <Cell key={entry.name} fill={COLORS[entry.name]} />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(v, n, p) => [
-              `${v} (${formatPercent(p?.payload?.percent)}%)`,
-              n
-            ]}
-          />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-        </PieChart>
-      </ResponsiveContainer>
+    <div className="task-chart">
+      <div className="task-chart-canvas">
+        <ResponsiveContainer>
+          <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={56}
+              outerRadius={86}
+              paddingAngle={1}
+              labelLine={false}
+              label={false}
+            >
+              {data.map(entry => (
+                <Cell key={entry.name} fill={COLORS[entry.name]} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(v, n, p) => [
+                `${v} (${formatPercent(p?.payload?.percent)}%)`,
+                n
+              ]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="task-chart-center">
+          <div className="task-chart-total">{total}</div>
+          <div className="task-chart-label">Tasks</div>
+        </div>
+      </div>
+      <div className="task-chart-summary">
+        {data.map(item => (
+          <div key={item.name} className="task-chart-item">
+            <span
+              className="task-chart-dot"
+              style={{ background: COLORS[item.name] }}
+            />
+            <span>
+              {item.name}: {item.value === 0 ? 0 : item.percent}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

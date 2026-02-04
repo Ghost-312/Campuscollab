@@ -8,8 +8,19 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("student");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+
+  const isValidEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const isStrongPassword = value => {
+    if (value.length < 8) return false;
+    if (!/[a-z]/.test(value)) return false;
+    if (!/[A-Z]/.test(value)) return false;
+    if (!/[0-9]/.test(value)) return false;
+    if (!/[^A-Za-z0-9]/.test(value)) return false;
+    return true;
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -20,11 +31,26 @@ export default function Register() {
   }, [location.search]);
 
   const register = async () => {
+    setError("");
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    if (!cleanEmail || !password) {
+      setError("Email and password are required");
+      return;
+    }
+    if (!isValidEmail(cleanEmail)) {
+      setError("Enter a valid email address");
+      return;
+    }
+    if (!isStrongPassword(password)) {
+      setError("Password must be 8+ chars with upper, lower, number, and symbol.");
+      return;
+    }
     try {
-      await api.post("/auth/register", { name, email, password, role });
+      await api.post("/auth/register", { name: cleanName, email: cleanEmail, password, role });
       navigate("/");
     } catch (err) {
-      alert(err?.response?.data?.msg || "Registration failed");
+      setError(err?.response?.data?.msg || "Registration failed");
     }
   };
 
@@ -44,6 +70,8 @@ export default function Register() {
     <div className="auth-bg">
       <div className="auth-card">
         <h2 className="auth-title">Register</h2>
+
+        {error && <p className="auth-error">{error}</p>}
 
         <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />

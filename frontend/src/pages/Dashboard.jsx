@@ -35,6 +35,14 @@ export default function Dashboard() {
   const [inviteEnabled, setInviteEnabled] = useState(true);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
+  const dedupeTasks = list => {
+    const map = new Map();
+    (list || []).forEach(task => {
+      if (task?._id) map.set(String(task._id), task);
+    });
+    return Array.from(map.values());
+  };
+
   const isOwnerOrAdmin = project => {
     if (!project || !user?.id) return false;
     if (project.owner?._id && String(project.owner._id) === String(user.id)) return true;
@@ -151,7 +159,7 @@ export default function Dashboard() {
       api.get(`/tasks/${project._id}`),
       api.get(`/projects/${project._id}`)
     ]);
-    setTasks(tasksRes.data);
+    setTasks(dedupeTasks(tasksRes.data));
     setProjectDetails(projectRes.data);
     setMembers(projectRes.data?.members || []);
     setInviteEnabled(projectRes.data?.inviteEnabled !== false);
@@ -171,7 +179,7 @@ export default function Dashboard() {
       text: taskText,
       assignedTo: assignTo || null
     });
-    setTasks(prev => (prev.some(t => t._id === res.data._id) ? prev : [...prev, res.data]));
+    setTasks(prev => dedupeTasks([...prev, res.data]));
     setTaskText("");
     setAssignTo("");
   };
@@ -188,7 +196,7 @@ export default function Dashboard() {
       text: editTaskText,
       assignedTo: editAssignedTo || null
     });
-    setTasks(tasks.map(t => (t._id === editingTaskId ? res.data : t)));
+    setTasks(prev => prev.map(t => (t._id === editingTaskId ? res.data : t)));
     setEditingTaskId(null);
     setEditTaskText("");
     setEditAssignedTo("");
@@ -197,7 +205,7 @@ export default function Dashboard() {
 
   const updateStatus = async (id, status) => {
     const res = await api.put(`/tasks/${id}`, { status });
-    setTasks(tasks.map(t => (t._id === id ? res.data : t)));
+    setTasks(prev => prev.map(t => (t._id === id ? res.data : t)));
   };
 
   const deleteTask = async id => {
@@ -243,7 +251,7 @@ export default function Dashboard() {
     if (!selected) return;
 
     const onCreated = task => {
-      setTasks(prev => (prev.some(t => t._id === task._id) ? prev : [...prev, task]));
+      setTasks(prev => dedupeTasks([...prev, task]));
     };
     const onUpdated = task => {
       setTasks(prev => prev.map(t => (t._id === task._id ? task : t)));
@@ -260,7 +268,7 @@ export default function Dashboard() {
     const refreshTasks = async () => {
       try {
         const res = await api.get(`/tasks/${selected._id}`);
-        setTasks(res.data);
+        setTasks(dedupeTasks(res.data));
       } catch (err) {}
     };
     const startPolling = () => {
@@ -732,7 +740,7 @@ export default function Dashboard() {
                     >
                       {task.text}
                       {task.assignedTo?.name ? (
-                        <span className="task-assignee"> • {task.assignedTo.name}</span>
+                        <span className="task-assignee"> - {task.assignedTo.name}</span>
                       ) : null}
                     </span>
                   )}
@@ -843,10 +851,10 @@ export default function Dashboard() {
                       {a.action === "assignee_changed" && "changed assignee"}
                       {a.task?.text ? `: ${a.task.text}` : ""}
                       {a.action === "status_changed" && a.toStatus
-                        ? ` → ${a.toStatus}`
+                        ? ` -> ${a.toStatus}`
                         : ""}
                       {a.action === "assignee_changed" && a.toAssignee?.name
-                        ? ` → ${a.toAssignee.name}`
+                        ? ` -> ${a.toAssignee.name}`
                         : ""}
                     </div>
                     <div className="activity-time">

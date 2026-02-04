@@ -29,6 +29,15 @@ export default function ResetPassword() {
     return { label: "Strong", level: "strong" };
   }, [password]);
 
+  const isStrongPassword = value => {
+    if (value.length < 8) return false;
+    if (!/[a-z]/.test(value)) return false;
+    if (!/[A-Z]/.test(value)) return false;
+    if (!/[0-9]/.test(value)) return false;
+    if (!/[^A-Za-z0-9]/.test(value)) return false;
+    return true;
+  };
+
   const submit = async () => {
     setError("");
     setStatus("");
@@ -36,8 +45,8 @@ export default function ResetPassword() {
       setError("Missing reset token");
       return;
     }
-    if (!password.trim() || password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (!isStrongPassword(password)) {
+      setError("Password must be at least 8 characters and include upper, lower, number, and symbol.");
       return;
     }
     if (password !== confirm) {

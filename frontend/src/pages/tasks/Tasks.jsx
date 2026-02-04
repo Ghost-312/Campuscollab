@@ -10,8 +10,16 @@ export default function Tasks({ projectId }) {
   const [confirm, setConfirm] = useState({ open: false, id: null, label: "" });
   const [taskMenuOpen, setTaskMenuOpen] = useState(null);
 
+  const dedupeTasks = list => {
+    const map = new Map();
+    (list || []).forEach(task => {
+      if (task?._id) map.set(String(task._id), task);
+    });
+    return Array.from(map.values());
+  };
+
   useEffect(() => {
-    api.get(`/tasks/${projectId}`).then(res => setTasks(res.data));
+    api.get(`/tasks/${projectId}`).then(res => setTasks(dedupeTasks(res.data)));
   }, [projectId]);
 
   useEffect(() => {
@@ -26,7 +34,7 @@ export default function Tasks({ projectId }) {
 
   const addTask = async () => {
     const res = await api.post(`/tasks/${projectId}`, { text });
-    setTasks(prev => (prev.some(t => t._id === res.data._id) ? prev : [...prev, res.data]));
+    setTasks(prev => dedupeTasks([...prev, res.data]));
     setText("");
   };
 
