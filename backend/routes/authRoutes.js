@@ -157,13 +157,10 @@ router.post("/forgot-password", async (req, res) => {
       });
     } catch (err) {
       if (String(err?.message) === "SMTP_NOT_CONFIGURED") {
-        if (process.env.NODE_ENV !== "production") {
-          return res.json({
-            msg: "Email not configured on server. Use the reset link below.",
-            resetLink
-          });
-        }
-        return res.status(500).json({ msg: "Email not configured on server" });
+        return res.json({
+          msg: "Email not configured on server. Use the reset link below.",
+          resetLink
+        });
       }
       throw err;
     }
