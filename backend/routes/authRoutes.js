@@ -24,6 +24,23 @@ const isStrongPassword = password => {
   return true;
 };
 
+const ensureJwtSecret = res => {
+  if (!process.env.JWT_SECRET) {
+    res.status(500).json({ msg: "Server misconfigured: JWT secret missing" });
+    return false;
+  }
+  return true;
+};
+
+const handleDbError = (err, res) => {
+  const name = String(err?.name || "");
+  const message = String(err?.message || "");
+  if (name.includes("MongooseServerSelectionError") || message.includes("ECONNREFUSED")) {
+    return res.status(503).json({ msg: "Database unavailable. Try again shortly." });
+  }
+  return res.status(500).json({ msg: "Server error" });
+};
+
 /* REGISTER */
 router.post("/register", async (req, res) => {
   try {
@@ -62,7 +79,10 @@ router.post("/register", async (req, res) => {
 
     res.json({ msg: "Registered successfully" });
   } catch (err) {
-    res.status(500).json({ msg: "Registration failed" });
+    if (err?.code === 11000) {
+      return res.status(400).json({ msg: "Email already registered" });
+    }
+    return handleDbError(err, res);
   }
 });
 
@@ -89,6 +109,8 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ msg: "Enter correct email or password" });
     }
 
+    if (!ensureJwtSecret(res)) return;
+
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
@@ -100,7 +122,7 @@ router.post("/login", async (req, res) => {
       user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (err) {
-    res.status(500).json({ msg: "Login failed" });
+    return handleDbError(err, res);
   }
 });
 
