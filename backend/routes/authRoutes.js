@@ -30,7 +30,7 @@ router.post("/register", async (req, res) => {
     const name = String(req.body.name || "").trim();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
-    const role = String(req.body.role || "student").trim();
+    const role = "student";
 
     if (!email || !password) {
       return res.status(400).json({ msg: "Email and password are required" });

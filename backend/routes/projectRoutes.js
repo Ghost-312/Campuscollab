@@ -17,10 +17,9 @@ const generateCode = async () => {
   return code;
 };
 
-const isOwnerOrAdmin = (project, user) => {
+const isOwner = (project, user) => {
   if (!project || !user) return false;
-  if (String(project.owner) === String(user._id)) return true;
-  return user.role === "admin";
+  return String(project.owner) === String(user._id);
 };
 
 const router = express.Router();
@@ -60,7 +59,6 @@ router.get("/", auth, async (req, res) => {
 /* GET PROJECT DETAIL */
 router.get("/:id", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id)
       .populate("members", "name email role")
       .populate("owner", "name email role");
@@ -76,7 +74,8 @@ router.get("/:id", auth, async (req, res) => {
     const hasOwner = members.some(m => String(m._id || m) === ownerId);
     const mergedMembers = hasOwner ? members : [project.owner, ...members];
     const safeProject = project.toObject();
-    if (!isOwnerOrAdmin(project, user)) {
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
       safeProject.code = undefined;
     }
     res.json({ ...safeProject, members: mergedMembers });
@@ -88,13 +87,13 @@ router.get("/:id", auth, async (req, res) => {
 /* INVITE (GET CODE) */
 router.post("/:id/invite", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id);
     if (!isMember(project, req.userId)) {
       return res.status(403).json({ msg: "Not authorized" });
     }
-    if (!isOwnerOrAdmin(project, user)) {
-      return res.status(403).json({ msg: "Admin or owner required" });
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
+      return res.status(403).json({ msg: "Owner required" });
     }
     if (project.inviteEnabled === false) {
       return res.status(403).json({ msg: "Invites are disabled" });
@@ -112,13 +111,13 @@ router.post("/:id/invite", auth, async (req, res) => {
 /* INVITE BY EMAIL */
 router.post("/:id/invite/email", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id);
     if (!isMember(project, req.userId)) {
       return res.status(403).json({ msg: "Not authorized" });
     }
-    if (!isOwnerOrAdmin(project, user)) {
-      return res.status(403).json({ msg: "Admin or owner required" });
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
+      return res.status(403).json({ msg: "Owner required" });
     }
     if (project.inviteEnabled === false) {
       return res.status(403).json({ msg: "Invites are disabled" });
@@ -153,13 +152,13 @@ router.post("/:id/invite/email", auth, async (req, res) => {
 /* INVITE SETTINGS */
 router.post("/:id/invite/settings", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id);
     if (!isMember(project, req.userId)) {
       return res.status(403).json({ msg: "Not authorized" });
     }
-    if (!isOwnerOrAdmin(project, user)) {
-      return res.status(403).json({ msg: "Admin or owner required" });
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
+      return res.status(403).json({ msg: "Owner required" });
     }
     if (typeof req.body.inviteEnabled !== "boolean") {
       return res.status(400).json({ msg: "inviteEnabled must be boolean" });
@@ -175,13 +174,13 @@ router.post("/:id/invite/settings", auth, async (req, res) => {
 /* REGENERATE INVITE CODE */
 router.post("/:id/invite/regenerate", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id);
     if (!isMember(project, req.userId)) {
       return res.status(403).json({ msg: "Not authorized" });
     }
-    if (!isOwnerOrAdmin(project, user)) {
-      return res.status(403).json({ msg: "Admin or owner required" });
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
+      return res.status(403).json({ msg: "Owner required" });
     }
     if (project.inviteEnabled === false) {
       return res.status(403).json({ msg: "Invites are disabled" });
@@ -239,13 +238,13 @@ router.put("/:id", auth, async (req, res) => {
 /* DELETE PROJECT */
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
     const project = await Project.findById(req.params.id);
     if (!isMember(project, req.userId)) {
       return res.status(403).json({ msg: "Not authorized" });
     }
-    if (!isOwnerOrAdmin(project, user)) {
-      return res.status(403).json({ msg: "Admin or owner required" });
+    const user = await User.findById(req.userId);
+    if (!isOwner(project, user)) {
+      return res.status(403).json({ msg: "Owner required" });
     }
     await Project.findByIdAndDelete(req.params.id);
     res.json({ msg: "Project deleted" });

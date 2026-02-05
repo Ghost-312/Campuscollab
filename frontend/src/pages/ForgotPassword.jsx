@@ -69,6 +69,9 @@ export default function ForgotPassword() {
           placeholder="Email"
           value={email}
           onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") submit();
+          }}
         />
 
         <button className="primary-btn" onClick={submit}>

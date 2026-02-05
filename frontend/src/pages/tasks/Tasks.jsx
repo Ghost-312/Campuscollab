@@ -9,6 +9,7 @@ export default function Tasks({ projectId }) {
   const [editText, setEditText] = useState("");
   const [confirm, setConfirm] = useState({ open: false, id: null, label: "" });
   const [taskMenuOpen, setTaskMenuOpen] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const dedupeTasks = list => {
     const map = new Map();
@@ -16,6 +17,15 @@ export default function Tasks({ projectId }) {
       if (task?._id) map.set(String(task._id), task);
     });
     return Array.from(map.values());
+  };
+
+  const isTaskCreator = task => {
+    if (!task || !user?.id) return false;
+    const creatorId =
+      typeof task.createdBy === "object" && task.createdBy
+        ? task.createdBy._id || task.createdBy.id
+        : task.createdBy;
+    return String(creatorId) === String(user.id);
   };
 
   useEffect(() => {
@@ -94,6 +104,9 @@ export default function Tasks({ projectId }) {
               className="edit-input"
               value={editText}
               onChange={e => setEditText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") saveTask();
+              }}
             />
           ) : (
             <span>{t.text}</span>
@@ -125,32 +138,38 @@ export default function Tasks({ projectId }) {
                   className="kebab-menu"
                   onMouseLeave={() => setTaskMenuOpen(null)}
                 >
-                  <button onClick={() => startEditTask(t)}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                      <path
-                        d="M4 20h4l10-10-4-4L4 16v4Z"
-                        stroke="currentColor"
-                        fill="none"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Edit
-                  </button>
-                  <button onClick={() => requestDelete(t)}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                      <path
-                        d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
-                        stroke="currentColor"
-                        fill="none"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Delete
-                  </button>
+                  {isTaskCreator(t) ? (
+                    <>
+                      <button onClick={() => startEditTask(t)}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                          <path
+                            d="M4 20h4l10-10-4-4L4 16v4Z"
+                            stroke="currentColor"
+                            fill="none"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Edit
+                      </button>
+                      <button onClick={() => requestDelete(t)}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                          <path
+                            d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
+                            stroke="currentColor"
+                            fill="none"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <div className="section-subtitle">Only the creator can edit or delete.</div>
+                  )}
                 </div>
               )}
             </div>

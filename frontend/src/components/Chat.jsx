@@ -200,6 +200,9 @@ export default function Chat({ project }) {
                   className="edit-input"
                   value={editText}
                   onChange={e => setEditText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") saveEdit();
+                  }}
                 />
               ) : (
                 <p>
@@ -226,39 +229,41 @@ export default function Chat({ project }) {
                 </span>
               ) : null}
 
-              <div className="kebab">
-                <span onClick={() => setMenuIndex(menuIndex === i ? null : i)}>...</span>
-                {menuIndex === i && (
-                  <div className="kebab-menu">
-                    <button onClick={() => startEdit(m)}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                        <path
-                          d="M4 20h4l10-10-4-4L4 16v4Z"
-                          stroke="currentColor"
-                          fill="none"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Edit
-                    </button>
-                    <button onClick={() => confirmDelete(m._id)}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                        <path
-                          d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
-                          stroke="currentColor"
-                          fill="none"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              {isOwnMessage(m) ? (
+                <div className="kebab">
+                  <span onClick={() => setMenuIndex(menuIndex === i ? null : i)}>...</span>
+                  {menuIndex === i && (
+                    <div className="kebab-menu">
+                      <button onClick={() => startEdit(m)}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                          <path
+                            d="M4 20h4l10-10-4-4L4 16v4Z"
+                            stroke="currentColor"
+                            fill="none"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Edit
+                      </button>
+                      <button onClick={() => confirmDelete(m._id)}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                          <path
+                            d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
+                            stroke="currentColor"
+                            fill="none"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         ))}

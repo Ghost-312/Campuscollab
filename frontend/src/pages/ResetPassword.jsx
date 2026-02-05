@@ -76,6 +76,9 @@ export default function ResetPassword() {
             placeholder="New password"
             value={password}
             onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") submit();
+            }}
           />
           <button
             type="button"
@@ -99,6 +102,9 @@ export default function ResetPassword() {
             placeholder="Confirm password"
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") submit();
+            }}
           />
           <button
             type="button"

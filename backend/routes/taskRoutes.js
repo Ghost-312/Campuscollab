@@ -50,11 +50,13 @@ router.post("/:projectId", auth, async (req, res) => {
       text: req.body.text,
       status: "To-Do",
       project: req.params.projectId,
-      assignedTo
+      assignedTo,
+      createdBy: req.userId
     });
 
     await task.save();
     await task.populate("assignedTo", "name email role");
+    await task.populate("createdBy", "name email role");
     const activity = await TaskActivity.create({
       project: req.params.projectId,
       task: task._id,
@@ -82,7 +84,8 @@ router.get("/:projectId", auth, async (req, res) => {
     if (!project) return res.status(403).json({ msg: "Not authorized" });
 
     const tasks = await Task.find({ project: req.params.projectId })
-      .populate("assignedTo", "name email role");
+      .populate("assignedTo", "name email role")
+      .populate("createdBy", "name email role");
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ msg: "Failed to load tasks" });
@@ -100,6 +103,9 @@ router.put("/:id", auth, async (req, res) => {
     const isOwner = String(project.owner) === String(req.userId);
     const isAdmin = user?.role === "admin";
     const canManage = isOwner || isAdmin;
+    const isCreator = existing.createdBy
+      ? String(existing.createdBy) === String(req.userId)
+      : false;
     const isAssignee = existing.assignedTo
       ? String(existing.assignedTo) === String(req.userId)
       : false;
@@ -120,11 +126,15 @@ router.put("/:id", auth, async (req, res) => {
       updates.assignedTo = req.body.assignedTo.trim();
     }
     if (updates.assignedTo !== undefined && !canManage) {
-      return res.status(403).json({ msg: "Only admin/owner can reassign tasks" });
+      return res.status(403).json({ msg: "Only owner can reassign tasks" });
+    }
+    const isEditingDetails = updates.text !== undefined || updates.assignedTo !== undefined;
+    if (isEditingDetails && !isCreator) {
+      return res.status(403).json({ msg: "Only task creator can edit this task" });
     }
     if (!canManage) {
       if (existing.assignedTo && !isAssignee) {
-        return res.status(403).json({ msg: "Only assignee or admin/owner can update this task" });
+        return res.status(403).json({ msg: "Only assignee can update task status" });
       }
     }
 
@@ -132,7 +142,9 @@ router.put("/:id", auth, async (req, res) => {
       req.params.id,
       { $set: updates },
       { new: true }
-    ).populate("assignedTo", "name email role");
+    )
+      .populate("assignedTo", "name email role")
+      .populate("createdBy", "name email role");
 
     const activityEvents = [];
     if (typeof updates.status === "string" && updates.status !== existing.status) {
@@ -192,8 +204,11 @@ router.delete("/:id", auth, async (req, res) => {
     const isOwner = String(project.owner) === String(req.userId);
     const isAdmin = user?.role === "admin";
     const canManage = isOwner || isAdmin;
-    if (!canManage) {
-      return res.status(403).json({ msg: "Only admin/owner can delete tasks" });
+    const isCreator = existing.createdBy
+      ? String(existing.createdBy) === String(req.userId)
+      : false;
+    if (!isCreator) {
+      return res.status(403).json({ msg: "Only task creator can delete tasks" });
     }
 
     await Task.findByIdAndDelete(req.params.id);

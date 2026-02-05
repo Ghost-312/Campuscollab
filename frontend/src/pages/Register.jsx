@@ -6,7 +6,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("student");
+  const [role] = useState("student");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -73,14 +73,31 @@ export default function Register() {
 
         {error && <p className="auth-error">{error}</p>}
 
-        <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-        <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+        <input
+          placeholder="Name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") register();
+          }}
+        />
+        <input
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") register();
+          }}
+        />
         <div className="password-field">
           <input
             type={showPassword ? "text" : "password"}
             placeholder="Password"
             value={password}
             onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") register();
+            }}
           />
           <button
             type="button"
@@ -96,11 +113,7 @@ export default function Register() {
         <div className="password-rules">
           Use 8+ chars with upper, lower, number, and symbol.
         </div>
-        <select value={role} onChange={e => setRole(e.target.value)}>
-          <option value="student">Student</option>
-          <option value="mentor">Mentor</option>
-          <option value="admin">Admin</option>
-        </select>
+        <input value="Student" disabled />
 
         <button className="primary-btn" onClick={register}>
           Register

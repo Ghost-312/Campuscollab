@@ -43,11 +43,20 @@ export default function Dashboard() {
     return Array.from(map.values());
   };
 
-  const isOwnerOrAdmin = project => {
+  const isOwner = project => {
     if (!project || !user?.id) return false;
     if (project.owner?._id && String(project.owner._id) === String(user.id)) return true;
     if (project.owner && String(project.owner) === String(user.id)) return true;
-    return user.role === "admin";
+    return false;
+  };
+
+  const isTaskCreator = task => {
+    if (!task || !user?.id) return false;
+    const creatorId =
+      typeof task.createdBy === "object" && task.createdBy
+        ? task.createdBy._id || task.createdBy.id
+        : task.createdBy;
+    return String(creatorId) === String(user.id);
   };
 
   useEffect(() => {
@@ -395,11 +404,17 @@ export default function Dashboard() {
               placeholder="Project Title"
               value={title}
               onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") createProject();
+              }}
             />
             <input
               placeholder="Project Description"
               value={desc}
               onChange={e => setDesc(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") createProject();
+              }}
             />
             <button className="primary-btn" onClick={createProject}>
               Create
@@ -429,6 +444,9 @@ export default function Dashboard() {
               placeholder="Project Code"
               value={joinCode}
               onChange={e => setJoinCode(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") joinProject();
+              }}
             />
             <button className="primary-btn" onClick={joinProject}>
               Join
@@ -470,6 +488,9 @@ export default function Dashboard() {
                       onChange={e => setEditTitle(e.target.value)}
                       onClick={e => e.stopPropagation()}
                       placeholder="Project Title"
+                      onKeyDown={e => {
+                        if (e.key === "Enter") saveProject();
+                      }}
                     />
                     <input
                       className="edit-input"
@@ -477,6 +498,9 @@ export default function Dashboard() {
                       onChange={e => setEditDesc(e.target.value)}
                       onClick={e => e.stopPropagation()}
                       placeholder="Project Description"
+                      onKeyDown={e => {
+                        if (e.key === "Enter") saveProject();
+                      }}
                     />
                     <div className="action-row" onClick={e => e.stopPropagation()}>
                       <button className="success-btn" onClick={saveProject}>
@@ -518,7 +542,7 @@ export default function Dashboard() {
                               </svg>
                               Edit
                             </button>
-                        {isOwnerOrAdmin(p) && (
+                        {isOwner(p) && (
                           <button onClick={() => requestDeleteProject(p)}>
                                 <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
                                   <path
@@ -559,10 +583,10 @@ export default function Dashboard() {
               </span>
               <div>
                 <h3>Chat</h3>
-                <p className="section-subtitle">Global chat for all members</p>
+                <p className="section-subtitle">Select a project to chat</p>
               </div>
             </div>
-            <Chat project={null} />
+            {selected ? <Chat project={selected} /> : null}
           </div>
         </div>
 
@@ -586,7 +610,7 @@ export default function Dashboard() {
                 <div>
                   <h3>{selected.title}</h3>
                   <p className="section-subtitle">{selected.description}</p>
-                  {projectDetails?.code && isOwnerOrAdmin(projectDetails) && (
+                  {projectDetails?.code && isOwner(projectDetails) && (
                     <div className="code-row">
                       <span className="section-subtitle">Project Code: {projectDetails.code}</span>
                       <button className="ghost-btn" onClick={copyProjectCode}>
@@ -595,12 +619,15 @@ export default function Dashboard() {
                       {copyStatus && <span className="copy-status">{copyStatus}</span>}
                     </div>
                   )}
-                  {isOwnerOrAdmin(projectDetails) && (
+                  {isOwner(projectDetails) && (
                     <div className="invite-row">
                       <input
                         placeholder="Invite by email"
                         value={inviteEmail}
                         onChange={e => setInviteEmail(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") inviteByEmail();
+                        }}
                       />
                       <button className="primary-btn" onClick={inviteByEmail}>
                         Send Invite
@@ -608,7 +635,7 @@ export default function Dashboard() {
                       {inviteStatus && <span className="copy-status">{inviteStatus}</span>}
                     </div>
                   )}
-                  {isOwnerOrAdmin(projectDetails) && (
+                  {isOwner(projectDetails) && (
                     <div className="invite-row">
                       <button
                         className="ghost-btn"
@@ -688,6 +715,9 @@ export default function Dashboard() {
                 <select
                   value={assignTo}
                   onChange={e => setAssignTo(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") addTask();
+                  }}
                 >
                   <option value="">Unassigned</option>
                   {members.map(m => (
@@ -719,10 +749,16 @@ export default function Dashboard() {
                         value={editTaskText}
                         onChange={e => setEditTaskText(e.target.value)}
                         onClick={e => e.stopPropagation()}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") saveTask();
+                        }}
                       />
                       <select
                         value={editAssignedTo}
                         onChange={e => setEditAssignedTo(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") saveTask();
+                        }}
                       >
                         <option value="">Unassigned</option>
                         {members.map(m => (
@@ -782,33 +818,37 @@ export default function Dashboard() {
                           className="kebab-menu"
                           onMouseLeave={() => setTaskMenuOpen(null)}
                         >
-                          <button onClick={() => startEditTask(task)}>
-                            <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                              <path
-                                d="M4 20h4l10-10-4-4L4 16v4Z"
-                                stroke="currentColor"
-                                fill="none"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                            Edit
-                          </button>
-                          {isOwnerOrAdmin(projectDetails) && (
-                            <button onClick={() => requestDeleteTask(task)}>
-                              <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                                <path
-                                  d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
-                                  stroke="currentColor"
-                                  fill="none"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              Delete
-                            </button>
+                          {isTaskCreator(task) ? (
+                            <>
+                              <button onClick={() => startEditTask(task)}>
+                                <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                                  <path
+                                    d="M4 20h4l10-10-4-4L4 16v4Z"
+                                    stroke="currentColor"
+                                    fill="none"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                Edit
+                              </button>
+                              <button onClick={() => requestDeleteTask(task)}>
+                                <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                                  <path
+                                    d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
+                                    stroke="currentColor"
+                                    fill="none"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <div className="section-subtitle">Only the creator can edit or delete.</div>
                           )}
                         </div>
                       )}
