@@ -33,6 +33,7 @@ export default function Dashboard() {
   });
   const [projectMenuOpen, setProjectMenuOpen] = useState(null);
   const [taskMenuOpen, setTaskMenuOpen] = useState(null);
+  const [memberMenuOpen, setMemberMenuOpen] = useState(null);
   const navigate = useNavigate();
   const previousProjectId = useRef(null);
   const [activities, setActivities] = useState([]);
@@ -120,6 +121,7 @@ export default function Dashboard() {
       if (!e.target.closest(".kebab")) {
         setProjectMenuOpen(null);
         setTaskMenuOpen(null);
+        setMemberMenuOpen(null);
       }
     };
     document.addEventListener("click", handleClick);
@@ -375,12 +377,44 @@ export default function Dashboard() {
 
   const leaveProject = async () => {
     if (!selected?._id) return;
+    if (isOwner(selected)) {
+      const msg = "Transfer ownership to another member before leaving this project.";
+      setInviteStatus(msg);
+      setTimeout(() => setInviteStatus(""), 3000);
+      window.alert(msg);
+      return;
+    }
     try {
       await api.post(`/projects/${selected._id}/leave`);
       socket.emit("leaveProject", selected._id);
       previousProjectId.current = null;
       setProjects(prev => prev.filter(p => p._id !== selected._id));
       clearSelectedProject();
+      setInviteStatus("You left the project");
+      setTimeout(() => setInviteStatus(""), 2000);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Failed to leave project");
+      setTimeout(() => setInviteStatus(""), 2000);
+    }
+  };
+
+  const leaveProjectById = async project => {
+    if (!project?._id) return;
+    if (isOwner(project)) {
+      const msg = "You are the owner. Transfer ownership to another member before leaving.";
+      setInviteStatus(msg);
+      setTimeout(() => setInviteStatus(""), 3000);
+      window.alert(msg);
+      return;
+    }
+    try {
+      await api.post(`/projects/${project._id}/leave`);
+      socket.emit("leaveProject", project._id);
+      if (selected?._id === project._id) {
+        previousProjectId.current = null;
+        clearSelectedProject();
+      }
+      setProjects(prev => prev.filter(p => p._id !== project._id));
       setInviteStatus("You left the project");
       setTimeout(() => setInviteStatus(""), 2000);
     } catch (err) {
@@ -752,7 +786,7 @@ export default function Dashboard() {
                         {projectMenuOpen === p._id && (
                           <div className="kebab-menu">
                             {canLeadProject(p) && (
-                              <button onClick={() => startEditProject(p)}>
+                              <button className="menu-btn-edit" onClick={() => startEditProject(p)}>
                                 <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
                                   <path
                                     d="M4 20h4l10-10-4-4L4 16v4Z"
@@ -766,8 +800,8 @@ export default function Dashboard() {
                                 Edit
                               </button>
                             )}
-                        {isOwner(p) && (
-                          <button onClick={() => requestDeleteProject(p)}>
+                            {isOwner(p) && (
+                              <button className="menu-btn-delete" onClick={() => requestDeleteProject(p)}>
                                 <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
                                   <path
                                     d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"
@@ -781,6 +815,19 @@ export default function Dashboard() {
                                 Delete
                               </button>
                             )}
+                              <button className="menu-btn-leave" onClick={() => leaveProjectById(p)}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                                <path
+                                  d="M15 4h5v16h-5 M10 8l-4 4 4 4 M6 12h9"
+                                  stroke="currentColor"
+                                  fill="none"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                              Leave
+                            </button>
                           </div>
                         )}
                       </div>
@@ -918,35 +965,37 @@ export default function Dashboard() {
                       </span>
                       {isOwner(projectDetails) &&
                         String(m._id) !== String(projectDetails?.owner?._id || projectDetails?.owner) && (
-                          <>
-                            {isProjectAdminMember(projectDetails, m._id) ? (
-                              <button
-                                className="ghost-btn"
-                                onClick={() => setProjectAdminAccess(m, false)}
+                          <div className="kebab inline">
+                            <span
+                              onClick={() =>
+                                setMemberMenuOpen(memberMenuOpen === m._id ? null : m._id)
+                              }
+                            >
+                              ...
+                            </span>
+                            {memberMenuOpen === m._id && (
+                              <div
+                                className="kebab-menu"
+                                onMouseLeave={() => setMemberMenuOpen(null)}
                               >
-                                Remove Admin
-                              </button>
-                            ) : (
-                              <button
-                                className="ghost-btn"
-                                onClick={() => setProjectAdminAccess(m, true)}
-                              >
-                                Make Admin
-                              </button>
+                                {isProjectAdminMember(projectDetails, m._id) ? (
+                                  <button className="menu-btn-admin-remove" onClick={() => setProjectAdminAccess(m, false)}>
+                                    Remove Admin
+                                  </button>
+                                ) : (
+                                  <button className="menu-btn-admin-add" onClick={() => setProjectAdminAccess(m, true)}>
+                                    Make Admin
+                                  </button>
+                                )}
+                                <button className="menu-btn-owner" onClick={() => requestTransferOwnership(m)}>
+                                  Make Owner
+                                </button>
+                                <button className="menu-btn-delete" onClick={() => removeMemberFromProject(m)}>
+                                  Remove
+                                </button>
+                              </div>
                             )}
-                            <button
-                              className="ghost-btn"
-                              onClick={() => requestTransferOwnership(m)}
-                            >
-                              Make Owner
-                            </button>
-                            <button
-                              className="ghost-btn"
-                              onClick={() => removeMemberFromProject(m)}
-                            >
-                              Remove
-                            </button>
-                          </>
+                          </div>
                         )}
                     </div>
                   ))}
