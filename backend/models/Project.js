@@ -6,7 +6,8 @@ const projectSchema = new mongoose.Schema({
   code: { type: String, unique: true, index: true },
   inviteEnabled: { type: Boolean, default: true },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
+  members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
 });
 
 module.exports = mongoose.model("Project", projectSchema);

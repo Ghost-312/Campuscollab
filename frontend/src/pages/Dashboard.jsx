@@ -23,7 +23,14 @@ export default function Dashboard() {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTaskText, setEditTaskText] = useState("");
   const [editAssignedTo, setEditAssignedTo] = useState("");
-  const [confirm, setConfirm] = useState({ open: false, kind: null, id: null, label: "" });
+  const [confirm, setConfirm] = useState({
+    open: false,
+    kind: null,
+    id: null,
+    label: "",
+    targetMemberId: null,
+    targetMemberLabel: ""
+  });
   const [projectMenuOpen, setProjectMenuOpen] = useState(null);
   const [taskMenuOpen, setTaskMenuOpen] = useState(null);
   const navigate = useNavigate();
@@ -50,6 +57,25 @@ export default function Dashboard() {
     return false;
   };
 
+  const isProjectAdminMember = (project, memberId) => {
+    if (!project || !memberId) return false;
+    const admins = Array.isArray(project.admins) ? project.admins : [];
+    return admins.some(a => String(a?._id || a) === String(memberId));
+  };
+
+  const canLeadProject = project => {
+    if (!project || !user?.id) return false;
+    if (isOwner(project)) return true;
+    return isProjectAdminMember(project, user.id);
+  };
+
+  const getProjectAdmins = project => {
+    if (!project) return [];
+    const admins = Array.isArray(project.admins) ? project.admins : [];
+    const ownerId = String(project.owner?._id || project.owner || "");
+    return admins.filter(a => String(a?._id || a) !== ownerId);
+  };
+
   const isTaskCreator = task => {
     if (!task || !user?.id) return false;
     const creatorId =
@@ -57,6 +83,14 @@ export default function Dashboard() {
         ? task.createdBy._id || task.createdBy.id
         : task.createdBy;
     return String(creatorId) === String(user.id);
+  };
+
+  const clearSelectedProject = () => {
+    setSelected(null);
+    setTasks([]);
+    setProjectDetails(null);
+    setMembers([]);
+    setActivities([]);
   };
 
   useEffect(() => {
@@ -73,6 +107,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    socket.auth = token ? { token } : {};
     socket.connect();
     return () => {
       socket.disconnect();
@@ -103,6 +139,19 @@ export default function Dashboard() {
     } catch (err) {
       setActivities([]);
     }
+  };
+
+  const refreshSelectedProject = async projectId => {
+    if (!projectId) return;
+    const [tasksRes, projectRes] = await Promise.all([
+      api.get(`/tasks/${projectId}`),
+      api.get(`/projects/${projectId}`)
+    ]);
+    setTasks(dedupeTasks(tasksRes.data));
+    setProjectDetails(projectRes.data);
+    setMembers(projectRes.data?.members || []);
+    setInviteEnabled(projectRes.data?.inviteEnabled !== false);
+    await loadActivities(projectId);
   };
 
   useEffect(() => {
@@ -139,6 +188,7 @@ export default function Dashboard() {
   };
 
   const startEditProject = project => {
+    if (!canLeadProject(project)) return;
     setEditingProjectId(project._id);
     setEditTitle(project.title);
     setEditDesc(project.description || "");
@@ -146,26 +196,47 @@ export default function Dashboard() {
 
   const saveProject = async () => {
     if (!editTitle.trim()) return;
-    const res = await api.put(`/projects/${editingProjectId}`, {
-      title: editTitle,
-      description: editDesc
-    });
-    setProjects(projects.map(p => (p._id === editingProjectId ? res.data : p)));
-    if (selected?._id === editingProjectId) setSelected(res.data);
-    setEditingProjectId(null);
-    setEditTitle("");
-    setEditDesc("");
-    setProjectMenuOpen(null);
+    try {
+      const res = await api.put(`/projects/${editingProjectId}`, {
+        title: editTitle,
+        description: editDesc
+      });
+      setProjects(projects.map(p => (p._id === editingProjectId ? res.data : p)));
+      if (selected?._id === editingProjectId) setSelected(res.data);
+      setEditingProjectId(null);
+      setEditTitle("");
+      setEditDesc("");
+      setProjectMenuOpen(null);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Project update failed");
+      setTimeout(() => setInviteStatus(""), 2500);
+    }
+  };
+
+  const setProjectAdminAccess = async (member, isAdmin) => {
+    if (!selected?._id || !member?._id) return;
+    try {
+      await api.post(`/projects/${selected._id}/admins`, {
+        memberId: member._id,
+        isAdmin
+      });
+      await refreshSelectedProject(selected._id);
+      await loadProjects();
+      setInviteStatus(
+        `${member.name || member.email || "Member"} ${isAdmin ? "is now project admin" : "admin access removed"}`
+      );
+      setTimeout(() => setInviteStatus(""), 2500);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Failed to update admin access");
+      setTimeout(() => setInviteStatus(""), 2500);
+    }
   };
 
   const deleteProject = async id => {
     await api.delete(`/projects/${id}`);
     setProjects(projects.filter(p => p._id !== id));
     if (selected?._id === id) {
-      setSelected(null);
-      setTasks([]);
-      setProjectDetails(null);
-      setMembers([]);
+      clearSelectedProject();
     }
   };
 
@@ -174,15 +245,7 @@ export default function Dashboard() {
     if (previousProjectId.current && previousProjectId.current !== project._id) {
       socket.emit("leaveProject", previousProjectId.current);
     }
-    const [tasksRes, projectRes] = await Promise.all([
-      api.get(`/tasks/${project._id}`),
-      api.get(`/projects/${project._id}`)
-    ]);
-    setTasks(dedupeTasks(tasksRes.data));
-    setProjectDetails(projectRes.data);
-    setMembers(projectRes.data?.members || []);
-    setInviteEnabled(projectRes.data?.inviteEnabled !== false);
-    await loadActivities(project._id);
+    await refreshSelectedProject(project._id);
     socket.emit("joinProject", project._id);
     previousProjectId.current = project._id;
   };
@@ -236,7 +299,9 @@ export default function Dashboard() {
       open: true,
       kind: "project",
       id: project._id,
-      label: project.title
+      label: project.title,
+      targetMemberId: null,
+      targetMemberLabel: ""
     });
   };
 
@@ -245,8 +310,83 @@ export default function Dashboard() {
       open: true,
       kind: "task",
       id: task._id,
-      label: task.text
+      label: task.text,
+      targetMemberId: null,
+      targetMemberLabel: ""
     });
+  };
+
+  const requestLeaveProject = project => {
+    setConfirm({
+      open: true,
+      kind: "leave",
+      id: project._id,
+      label: project.title,
+      targetMemberId: null,
+      targetMemberLabel: ""
+    });
+  };
+
+  const requestTransferOwnership = member => {
+    setConfirm({
+      open: true,
+      kind: "transfer_owner",
+      id: selected?._id || null,
+      label: selected?.title || "",
+      targetMemberId: member?._id || null,
+      targetMemberLabel: member?.name || member?.email || "this member"
+    });
+  };
+
+  const removeMemberFromProject = async member => {
+    if (!selected?._id || !member?._id) return;
+    try {
+      await api.delete(`/projects/${selected._id}/members/${member._id}`);
+      const projectRes = await api.get(`/projects/${selected._id}`);
+      setProjectDetails(projectRes.data);
+      setMembers(projectRes.data?.members || []);
+      setInviteEnabled(projectRes.data?.inviteEnabled !== false);
+      setInviteStatus(`${member.name || member.email || "Member"} removed`);
+      setTimeout(() => setInviteStatus(""), 2000);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Failed to remove member");
+      setTimeout(() => setInviteStatus(""), 2000);
+    }
+  };
+
+  const transferOwnership = async (memberId, memberLabel) => {
+    if (!selected?._id || !memberId) return;
+    try {
+      await api.post(`/projects/${selected._id}/transfer-owner`, {
+        nextOwnerId: memberId
+      });
+      const projectRes = await api.get(`/projects/${selected._id}`);
+      setProjectDetails(projectRes.data);
+      setMembers(projectRes.data?.members || []);
+      setInviteEnabled(projectRes.data?.inviteEnabled !== false);
+      await loadProjects();
+      setInviteStatus(`${memberLabel || "Member"} is now owner`);
+      setTimeout(() => setInviteStatus(""), 2500);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Failed to transfer ownership");
+      setTimeout(() => setInviteStatus(""), 2500);
+    }
+  };
+
+  const leaveProject = async () => {
+    if (!selected?._id) return;
+    try {
+      await api.post(`/projects/${selected._id}/leave`);
+      socket.emit("leaveProject", selected._id);
+      previousProjectId.current = null;
+      setProjects(prev => prev.filter(p => p._id !== selected._id));
+      clearSelectedProject();
+      setInviteStatus("You left the project");
+      setTimeout(() => setInviteStatus(""), 2000);
+    } catch (err) {
+      setInviteStatus(err?.response?.data?.msg || "Failed to leave project");
+      setTimeout(() => setInviteStatus(""), 2000);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -256,7 +396,20 @@ export default function Dashboard() {
     if (confirm.kind === "task") {
       await deleteTask(confirm.id);
     }
-    setConfirm({ open: false, kind: null, id: null, label: "" });
+    if (confirm.kind === "leave") {
+      await leaveProject();
+    }
+    if (confirm.kind === "transfer_owner") {
+      await transferOwnership(confirm.targetMemberId, confirm.targetMemberLabel);
+    }
+    setConfirm({
+      open: false,
+      kind: null,
+      id: null,
+      label: "",
+      targetMemberId: null,
+      targetMemberLabel: ""
+    });
   };
 
   const logout = () => {
@@ -320,6 +473,62 @@ export default function Dashboard() {
       socket.off("activity:created", onActivity);
       socket.off("connect", stopPolling);
       socket.off("disconnect", startPolling);
+    };
+  }, [selected]);
+
+  useEffect(() => {
+    const onProjectMembershipChanged = async payload => {
+      const projectId = payload?.projectId;
+      if (!projectId) return;
+      await loadProjects();
+      if (selected?._id && String(selected._id) === String(projectId)) {
+        try {
+          await refreshSelectedProject(projectId);
+        } catch (err) {}
+      }
+    };
+
+    const onAccessRevoked = payload => {
+      const projectId = payload?.projectId;
+      if (!projectId) return;
+      setProjects(prev => prev.filter(p => String(p._id) !== String(projectId)));
+      if (selected?._id && String(selected._id) === String(projectId)) {
+        socket.emit("leaveProject", projectId);
+        previousProjectId.current = null;
+        clearSelectedProject();
+        setInviteStatus("You were removed from this project");
+        setTimeout(() => setInviteStatus(""), 2500);
+      }
+    };
+
+    const onAccessDenied = payload => {
+      const projectId = payload?.projectId;
+      if (!projectId) return;
+      if (selected?._id && String(selected._id) === String(projectId)) {
+        previousProjectId.current = null;
+        clearSelectedProject();
+        setInviteStatus("Project access denied");
+        setTimeout(() => setInviteStatus(""), 2500);
+      }
+      loadProjects();
+    };
+
+    socket.on("project:member_joined", onProjectMembershipChanged);
+    socket.on("project:member_removed", onProjectMembershipChanged);
+    socket.on("project:member_left", onProjectMembershipChanged);
+    socket.on("project:owner_transferred", onProjectMembershipChanged);
+    socket.on("project:admin_updated", onProjectMembershipChanged);
+    socket.on("project:access_revoked", onAccessRevoked);
+    socket.on("project:access_denied", onAccessDenied);
+
+    return () => {
+      socket.off("project:member_joined", onProjectMembershipChanged);
+      socket.off("project:member_removed", onProjectMembershipChanged);
+      socket.off("project:member_left", onProjectMembershipChanged);
+      socket.off("project:owner_transferred", onProjectMembershipChanged);
+      socket.off("project:admin_updated", onProjectMembershipChanged);
+      socket.off("project:access_revoked", onAccessRevoked);
+      socket.off("project:access_denied", onAccessDenied);
     };
   }, [selected]);
 
@@ -542,19 +751,21 @@ export default function Dashboard() {
                         </span>
                         {projectMenuOpen === p._id && (
                           <div className="kebab-menu">
-                            <button onClick={() => startEditProject(p)}>
-                              <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
-                                <path
-                                  d="M4 20h4l10-10-4-4L4 16v4Z"
-                                  stroke="currentColor"
-                                  fill="none"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              Edit
-                            </button>
+                            {canLeadProject(p) && (
+                              <button onClick={() => startEditProject(p)}>
+                                <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
+                                  <path
+                                    d="M4 20h4l10-10-4-4L4 16v4Z"
+                                    stroke="currentColor"
+                                    fill="none"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                Edit
+                              </button>
+                            )}
                         {isOwner(p) && (
                           <button onClick={() => requestDeleteProject(p)}>
                                 <svg viewBox="0 0 24 24" aria-hidden="true" className="menu-icon">
@@ -622,6 +833,9 @@ export default function Dashboard() {
                 </span>
                 <div>
                   <h3>{selected.title}</h3>
+                  <p className="section-subtitle">
+                    Owner: {projectDetails?.owner?.name || "Unknown"}
+                  </p>
                   <p className="section-subtitle">{selected.description}</p>
                   {projectDetails?.code && isOwner(projectDetails) && (
                     <div className="code-row">
@@ -661,14 +875,79 @@ export default function Dashboard() {
                       </button>
                     </div>
                   )}
+                  {!isOwner(projectDetails) && (
+                    <div className="invite-row">
+                      <button
+                        className="danger-btn"
+                        onClick={() => requestLeaveProject(selected)}
+                      >
+                        Leave Project
+                      </button>
+                    </div>
+                  )}
                 </div>
+              </div>
+              <div className="member-list">
+                <h4>Leadership</h4>
+                <div className="member-pill">
+                  Owner: {projectDetails?.owner?.name || "Unknown"}
+                </div>
+                {getProjectAdmins(projectDetails).map(a => (
+                  <div key={a._id || a} className="member-pill">
+                    Admin: {a?.name || a?.email || "Member"}
+                  </div>
+                ))}
+                {getProjectAdmins(projectDetails).length === 0 && (
+                  <div className="member-pill">No additional project admins</div>
+                )}
               </div>
               {members.length > 0 && (
                 <div className="member-list">
                   <h4>Team Members</h4>
                   {members.map(m => (
                     <div key={m._id} className="member-pill">
-                      {m.name} {m.role ? `(${m.role})` : ""}
+                      <span>
+                        {m.name}
+                        {String(m._id) === String(projectDetails?.owner?._id || projectDetails?.owner)
+                          ? " (Owner)"
+                          : isProjectAdminMember(projectDetails, m._id)
+                          ? " (Project Admin)"
+                          : m.role
+                          ? ` (${m.role})`
+                          : ""}
+                      </span>
+                      {isOwner(projectDetails) &&
+                        String(m._id) !== String(projectDetails?.owner?._id || projectDetails?.owner) && (
+                          <>
+                            {isProjectAdminMember(projectDetails, m._id) ? (
+                              <button
+                                className="ghost-btn"
+                                onClick={() => setProjectAdminAccess(m, false)}
+                              >
+                                Remove Admin
+                              </button>
+                            ) : (
+                              <button
+                                className="ghost-btn"
+                                onClick={() => setProjectAdminAccess(m, true)}
+                              >
+                                Make Admin
+                              </button>
+                            )}
+                            <button
+                              className="ghost-btn"
+                              onClick={() => requestTransferOwnership(m)}
+                            >
+                              Make Owner
+                            </button>
+                            <button
+                              className="ghost-btn"
+                              onClick={() => removeMemberFromProject(m)}
+                            >
+                              Remove
+                            </button>
+                          </>
+                        )}
                     </div>
                   ))}
                 </div>
@@ -924,15 +1203,42 @@ export default function Dashboard() {
 
       <ConfirmModal
         open={confirm.open}
-        title={confirm.kind === "project" ? "Delete Project" : "Delete Task"}
+        title={
+          confirm.kind === "project"
+            ? "Delete Project"
+            : confirm.kind === "leave"
+            ? "Leave Project"
+            : confirm.kind === "transfer_owner"
+            ? "Transfer Ownership"
+            : "Delete Task"
+        }
         message={
           confirm.kind === "project"
             ? `Delete project "${confirm.label}"? This cannot be undone.`
+            : confirm.kind === "leave"
+            ? `Leave project "${confirm.label}"?`
+            : confirm.kind === "transfer_owner"
+            ? `Make "${confirm.targetMemberLabel}" the new owner of "${confirm.label}"?`
             : `Delete task "${confirm.label}"? This cannot be undone.`
         }
-        confirmText="Delete"
+        confirmText={
+          confirm.kind === "leave"
+            ? "Leave"
+            : confirm.kind === "transfer_owner"
+            ? "Transfer"
+            : "Delete"
+        }
         onConfirm={handleConfirmDelete}
-        onCancel={() => setConfirm({ open: false, kind: null, id: null, label: "" })}
+        onCancel={() =>
+          setConfirm({
+            open: false,
+            kind: null,
+            id: null,
+            label: "",
+            targetMemberId: null,
+            targetMemberLabel: ""
+          })
+        }
       />
     </div>
   );

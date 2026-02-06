@@ -4,6 +4,8 @@ const cors = require("cors");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
+const Project = require("./models/Project");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config();
 
@@ -22,9 +24,38 @@ const io = new Server(server, {
 
 app.set("io", io);
 
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake?.auth?.token;
+    if (!token || !process.env.JWT_SECRET) return next();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = String(decoded.id);
+    return next();
+  } catch {
+    return next();
+  }
+});
+
 io.on("connection", socket => {
-  socket.on("joinProject", projectId => {
-    if (projectId) socket.join(projectId);
+  if (socket.userId) {
+    socket.join(`user:${socket.userId}`);
+  }
+
+  socket.on("joinProject", async projectId => {
+    try {
+      if (!projectId || !socket.userId) return;
+      const project = await Project.findOne({
+        _id: projectId,
+        $or: [{ owner: socket.userId }, { members: socket.userId }]
+      }).select("_id");
+      if (!project) {
+        socket.emit("project:access_denied", { projectId });
+        return;
+      }
+      socket.join(String(projectId));
+    } catch {
+      socket.emit("project:access_denied", { projectId });
+    }
   });
   socket.on("leaveProject", projectId => {
     if (projectId) socket.leave(projectId);

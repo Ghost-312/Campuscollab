@@ -18,7 +18,7 @@ const createTransporter = () => {
   });
 };
 
-const sendInviteEmail = async ({ to, projectName, code, inviteLink }) => {
+const sendInviteEmail = async ({ to, projectName, code, inviteLink, siteUrl, loginUrl }) => {
   const transporter = createTransporter();
   if (!transporter) {
     throw new Error("SMTP_NOT_CONFIGURED");
@@ -29,6 +29,8 @@ const sendInviteEmail = async ({ to, projectName, code, inviteLink }) => {
   const text = [
     `You have been invited to join the project "${projectName}".`,
     `Project code: ${code}`,
+    siteUrl ? `Campus Collab site: ${siteUrl}` : "",
+    loginUrl ? `Login: ${loginUrl}` : "",
     inviteLink ? `Join link: ${inviteLink}` : ""
   ]
     .filter(Boolean)
@@ -40,6 +42,8 @@ const sendInviteEmail = async ({ to, projectName, code, inviteLink }) => {
       <div style="font-size: 22px; font-weight: bold; letter-spacing: 2px; margin-bottom: 12px;">
         ${code}
       </div>
+      ${siteUrl ? `<p style="margin: 0 0 8px;">Campus Collab site: <a href="${siteUrl}">${siteUrl}</a></p>` : ""}
+      ${loginUrl ? `<p style="margin: 0 0 8px;">Login: <a href="${loginUrl}">${loginUrl}</a></p>` : ""}
       ${inviteLink ? `<p style="margin: 0 0 8px;">Join link: <a href="${inviteLink}">${inviteLink}</a></p>` : ""}
       <p style="margin: 0; color: #555;">If you didn't expect this invite, you can ignore this email.</p>
     </div>

@@ -1,9 +1,8 @@
 const express = require("express");
 const Task = require("../models/Task");
 const TaskActivity = require("../models/TaskActivity");
-const User = require("../models/User");
 const auth = require("../middleware/authMiddleware");
-const { loadProjectIfMember, isProjectUser } = require("../utils/projectAccess");
+const { loadProjectIfMember, isProjectUser, isProjectAdmin } = require("../utils/projectAccess");
 
 const router = express.Router();
 
@@ -32,10 +31,7 @@ router.post("/:projectId", auth, async (req, res) => {
   try {
     const project = await loadProjectIfMember(req.params.projectId, req.userId);
     if (!project) return res.status(403).json({ msg: "Not authorized" });
-    const user = await User.findById(req.userId);
-    const isOwner = String(project.owner) === String(req.userId);
-    const isAdmin = user?.role === "admin";
-    const canManage = isOwner || isAdmin;
+    const canManage = isProjectAdmin(project, req.userId);
     const assignedTo = typeof req.body.assignedTo === "string" && req.body.assignedTo.trim()
       ? req.body.assignedTo.trim()
       : null;
@@ -43,7 +39,7 @@ router.post("/:projectId", auth, async (req, res) => {
       return res.status(400).json({ msg: "Assignee must be a project member" });
     }
     if (assignedTo && !canManage && String(assignedTo) !== String(req.userId)) {
-      return res.status(403).json({ msg: "Only admin/owner can assign others" });
+      return res.status(403).json({ msg: "Only project owner/admin can assign others" });
     }
 
     const task = new Task({
@@ -99,10 +95,7 @@ router.put("/:id", auth, async (req, res) => {
     if (!existing) return res.status(404).json({ msg: "Task not found" });
     const project = await loadProjectIfMember(existing.project, req.userId);
     if (!project) return res.status(403).json({ msg: "Not authorized" });
-    const user = await User.findById(req.userId);
-    const isOwner = String(project.owner) === String(req.userId);
-    const isAdmin = user?.role === "admin";
-    const canManage = isOwner || isAdmin;
+    const canManage = isProjectAdmin(project, req.userId);
     const isCreator = existing.createdBy
       ? String(existing.createdBy) === String(req.userId)
       : false;
@@ -126,10 +119,10 @@ router.put("/:id", auth, async (req, res) => {
       updates.assignedTo = req.body.assignedTo.trim();
     }
     if (updates.assignedTo !== undefined && !canManage) {
-      return res.status(403).json({ msg: "Only owner can reassign tasks" });
+      return res.status(403).json({ msg: "Only project owner/admin can reassign tasks" });
     }
     const isEditingDetails = updates.text !== undefined || updates.assignedTo !== undefined;
-    if (isEditingDetails && !isCreator) {
+    if (isEditingDetails && !isCreator && !canManage) {
       return res.status(403).json({ msg: "Only task creator can edit this task" });
     }
     if (!canManage) {
@@ -200,14 +193,11 @@ router.delete("/:id", auth, async (req, res) => {
     if (!existing) return res.status(404).json({ msg: "Task not found" });
     const project = await loadProjectIfMember(existing.project, req.userId);
     if (!project) return res.status(403).json({ msg: "Not authorized" });
-    const user = await User.findById(req.userId);
-    const isOwner = String(project.owner) === String(req.userId);
-    const isAdmin = user?.role === "admin";
-    const canManage = isOwner || isAdmin;
+    const canManage = isProjectAdmin(project, req.userId);
     const isCreator = existing.createdBy
       ? String(existing.createdBy) === String(req.userId)
       : false;
-    if (!isCreator) {
+    if (!isCreator && !canManage) {
       return res.status(403).json({ msg: "Only task creator can delete tasks" });
     }
 
