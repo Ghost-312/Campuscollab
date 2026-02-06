@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const { sendPasswordResetEmail } = require("../utils/mailer");
 
@@ -55,6 +56,16 @@ const isStrongPassword = password => {
   return true;
 };
 
+const ensureDbConnected = async () => {
+  if (!process.env.MONGO_URI) {
+    const err = new Error("MONGO_URI_MISSING");
+    err.code = "MONGO_URI_MISSING";
+    throw err;
+  }
+  if (mongoose.connection.readyState === 1) return;
+  await mongoose.connect(process.env.MONGO_URI);
+};
+
 const ensureJwtSecret = res => {
   if (!process.env.JWT_SECRET) {
     res.status(500).json({ msg: "Server misconfigured: JWT secret missing" });
@@ -66,7 +77,16 @@ const ensureJwtSecret = res => {
 const handleDbError = (err, res) => {
   const name = String(err?.name || "");
   const message = String(err?.message || "");
-  if (name.includes("MongooseServerSelectionError") || message.includes("ECONNREFUSED")) {
+  if (err?.code === "MONGO_URI_MISSING") {
+    return res.status(500).json({ msg: "Server misconfigured: database URL missing" });
+  }
+  if (
+    name.includes("MongooseServerSelectionError") ||
+    name.includes("MongoNetworkError") ||
+    message.includes("ECONNREFUSED") ||
+    message.includes("buffering timed out") ||
+    message.includes("Topology is closed")
+  ) {
     return res.status(503).json({ msg: "Database unavailable. Try again shortly." });
   }
   return res.status(500).json({ msg: "Server error" });
@@ -75,6 +95,7 @@ const handleDbError = (err, res) => {
 /* REGISTER */
 router.post("/register", async (req, res) => {
   try {
+    await ensureDbConnected();
     const name = String(req.body.name || "").trim();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
@@ -123,6 +144,7 @@ router.post("/register", async (req, res) => {
 /* LOGIN */
 router.post("/login", loginLimiter, async (req, res) => {
   try {
+    await ensureDbConnected();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
 
@@ -163,6 +185,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 /* FORGOT PASSWORD */
 router.post("/forgot-password", forgotPasswordLimiter, async (req, res) => {
   try {
+    await ensureDbConnected();
     const email = normalizeEmail(req.body.email);
     if (!email) return res.status(400).json({ msg: "Email is required" });
     if (!isValidEmail(email)) {
@@ -211,6 +234,7 @@ router.post("/forgot-password", forgotPasswordLimiter, async (req, res) => {
 /* RESET PASSWORD */
 router.post("/reset-password", async (req, res) => {
   try {
+    await ensureDbConnected();
     const token = String(req.body.token || "").trim();
     const password = String(req.body.password || "").trim();
     if (!token || !password) {
@@ -268,6 +292,7 @@ router.post("/admin-reset-password", async (req, res) => {
   }
 
   try {
+    await ensureDbConnected();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
 
