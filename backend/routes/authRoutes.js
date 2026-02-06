@@ -14,6 +14,36 @@ const findUserByEmail = email =>
   User.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") });
 const isProd = process.env.NODE_ENV === "production";
 
+// Lightweight in-memory limiter for sensitive auth flows.
+const createSimpleRateLimiter = ({ windowMs, limit }) => {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (entry.count >= limit) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.set("Retry-After", String(Math.max(retryAfter, 1)));
+      return res.status(429).json({ msg: "Too many requests. Please try again later." });
+    }
+    entry.count += 1;
+    return next();
+  };
+};
+
+const forgotPasswordLimiter = createSimpleRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 5
+});
+const loginLimiter = createSimpleRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 30
+});
+
 const isStrongPassword = password => {
   if (typeof password !== "string") return false;
   if (password.length < 8) return false;
@@ -87,7 +117,7 @@ router.post("/register", async (req, res) => {
 });
 
 /* LOGIN */
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
@@ -127,7 +157,7 @@ router.post("/login", async (req, res) => {
 });
 
 /* FORGOT PASSWORD */
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", forgotPasswordLimiter, async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
     if (!email) return res.status(400).json({ msg: "Email is required" });
@@ -157,11 +187,14 @@ router.post("/forgot-password", async (req, res) => {
       });
     } catch (err) {
       if (String(err?.message) === "SMTP_NOT_CONFIGURED") {
-        return res.json({
-          msg: "Email not configured on server. Use the reset link below.",
-          resetLink
-        });
+        user.resetTokenHash = undefined;
+        user.resetTokenExpires = undefined;
+        await user.save();
+        return res.status(503).json({ msg: "Password reset is temporarily unavailable." });
       }
+      user.resetTokenHash = undefined;
+      user.resetTokenExpires = undefined;
+      await user.save();
       throw err;
     }
 
