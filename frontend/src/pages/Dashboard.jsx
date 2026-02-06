@@ -95,6 +95,16 @@ export default function Dashboard() {
     setProjects(res.data);
   };
 
+  const loadActivities = async projectId => {
+    if (!projectId) return;
+    try {
+      const activityRes = await api.get(`/tasks/activity/${projectId}`);
+      setActivities(activityRes.data);
+    } catch (err) {
+      setActivities([]);
+    }
+  };
+
   useEffect(() => {
     const tryJoin = async () => {
       const code = localStorage.getItem("pendingProjectCode");
@@ -172,12 +182,7 @@ export default function Dashboard() {
     setProjectDetails(projectRes.data);
     setMembers(projectRes.data?.members || []);
     setInviteEnabled(projectRes.data?.inviteEnabled !== false);
-    try {
-      const activityRes = await api.get(`/tasks/activity/${project._id}`);
-      setActivities(activityRes.data);
-    } catch (err) {
-      setActivities([]);
-    }
+    await loadActivities(project._id);
     socket.emit("joinProject", project._id);
     previousProjectId.current = project._id;
   };
@@ -189,6 +194,7 @@ export default function Dashboard() {
       assignedTo: assignTo || null
     });
     setTasks(prev => dedupeTasks([...prev, res.data]));
+    loadActivities(selected._id);
     setTaskText("");
     setAssignTo("");
   };
@@ -206,6 +212,7 @@ export default function Dashboard() {
       assignedTo: editAssignedTo || null
     });
     setTasks(prev => prev.map(t => (t._id === editingTaskId ? res.data : t)));
+    if (selected?._id) loadActivities(selected._id);
     setEditingTaskId(null);
     setEditTaskText("");
     setEditAssignedTo("");
@@ -215,11 +222,13 @@ export default function Dashboard() {
   const updateStatus = async (id, status) => {
     const res = await api.put(`/tasks/${id}`, { status });
     setTasks(prev => prev.map(t => (t._id === id ? res.data : t)));
+    if (selected?._id) loadActivities(selected._id);
   };
 
   const deleteTask = async id => {
     await api.delete(`/tasks/${id}`);
     setTasks(tasks.filter(t => t._id !== id));
+    if (selected?._id) loadActivities(selected._id);
   };
 
   const requestDeleteProject = project => {
@@ -274,14 +283,18 @@ export default function Dashboard() {
     };
 
     let pollId = null;
-    const refreshTasks = async () => {
+    const refreshProjectData = async () => {
       try {
-        const res = await api.get(`/tasks/${selected._id}`);
-        setTasks(dedupeTasks(res.data));
+        const [tasksRes, activityRes] = await Promise.all([
+          api.get(`/tasks/${selected._id}`),
+          api.get(`/tasks/activity/${selected._id}`)
+        ]);
+        setTasks(dedupeTasks(tasksRes.data));
+        setActivities(activityRes.data);
       } catch (err) {}
     };
     const startPolling = () => {
-      if (!pollId) pollId = setInterval(refreshTasks, 5000);
+      if (!pollId) pollId = setInterval(refreshProjectData, 5000);
     };
     const stopPolling = () => {
       if (pollId) {

@@ -6,7 +6,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role] = useState("student");
+  const [role, setRole] = useState("student");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -113,7 +113,11 @@ export default function Register() {
         <div className="password-rules">
           Use 8+ chars with upper, lower, number, and symbol.
         </div>
-        <input value="Student" disabled />
+        <select value={role} onChange={e => setRole(e.target.value)}>
+          <option value="student">Student</option>
+          <option value="admin">Admin</option>
+          <option value="faculty">Faculty</option>
+        </select>
 
         <button className="primary-btn" onClick={register}>
           Register

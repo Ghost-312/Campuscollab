@@ -13,6 +13,7 @@ const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const findUserByEmail = email =>
   User.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") });
 const isProd = process.env.NODE_ENV === "production";
+const allowedRoles = new Set(["student", "admin", "faculty"]);
 
 // Lightweight in-memory limiter for sensitive auth flows.
 const createSimpleRateLimiter = ({ windowMs, limit }) => {
@@ -77,7 +78,7 @@ router.post("/register", async (req, res) => {
     const name = String(req.body.name || "").trim();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || "");
-    const role = "student";
+    const role = String(req.body.role || "student").trim().toLowerCase();
 
     if (!email || !password) {
       return res.status(400).json({ msg: "Email and password are required" });
@@ -89,6 +90,9 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({
         msg: "Password must be at least 8 characters and include upper, lower, number, and symbol."
       });
+    }
+    if (!allowedRoles.has(role)) {
+      return res.status(400).json({ msg: "Role must be student, admin, or faculty" });
     }
 
     const exists = await findUserByEmail(email);

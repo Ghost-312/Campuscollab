@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="CampusCollab icon">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffd84d"/>
+      <stop offset="100%" stop-color="#ff5a2a"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7b4cff"/>
+      <stop offset="100%" stop-color="#2f2ecf"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#18bfff"/>
+      <stop offset="100%" stop-color="#4de4ff"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="36" fill="#0a0d3d"/>
+
+  <g fill="none" stroke-linecap="round" stroke-width="28" filter="url(#softGlow)">
+    <path d="M64 126c8-42 42-69 87-69 23 0 43 9 57 22" stroke="url(#g1)"/>
+    <path d="M194 78c20 16 32 41 32 70 0 44-28 78-69 86" stroke="url(#g2)"/>
+    <path d="M158 233c-9 2-18 3-28 3-51 0-92-37-98-86" stroke="url(#g3)"/>
+  </g>
+
+  <circle cx="198" cy="72" r="11" fill="#ff4adf"/>
+  <circle cx="43" cy="148" r="11" fill="#ffb24a"/>
+  <circle cx="215" cy="149" r="11" fill="#5fd9ff"/>
+</svg>
